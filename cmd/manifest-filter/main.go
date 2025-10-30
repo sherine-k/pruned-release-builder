@@ -19,7 +19,6 @@ import (
 var (
 	sourceImage   string
 	targetImage   string
-	pushToken     string
 	architectures []string
 	outputDigest  bool
 )
@@ -38,11 +37,9 @@ and pushes the filtered manifest list to a new location.`,
 	rootCmd.Flags().StringVarP(&targetImage, "target", "t", "", "Target image reference (required)")
 	rootCmd.Flags().StringSliceVarP(&architectures, "arch", "a", []string{"amd64", "arm64"}, "Architectures to include")
 	rootCmd.Flags().BoolVarP(&outputDigest, "digest", "d", false, "Output only the digest of the pushed image")
-	rootCmd.Flags().StringVar(&pushToken, "target-token", "", "auth token to push (required)")
 
 	rootCmd.MarkFlagRequired("source")
 	rootCmd.MarkFlagRequired("target")
-	rootCmd.MarkFlagRequired("target-token")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -117,10 +114,6 @@ func runFilter(cmd *cobra.Command, args []string) error {
 		log.Printf("Filtered to %d manifests", len(filteredManifests))
 	}
 
-	// Set up authentication
-	// authOption := remote.WithAuth(authn.FromConfig(authn.AuthConfig{Username: "skhoury", Password: "XmmVO0+kl/Y1umZ7zFvArv4sQkLTTqlIw4H9FrjvnYMduOhvvMC133NcYttf4hDq"}))
-	authOption := remote.WithAuth(authn.FromConfig(authn.AuthConfig{Auth: "c2tob3VyeTpYbW1WTzAra2wvWTF1bVo3ekZ2QXJ2NHNRa0xUVHFsSXc0SDlGcmp2bllNZHVPaHZ2TUMxMzNOY1l0dGY0aERx"}))
-
 	// Push each platform-specific image to the target registry first
 	convertedImages := make(map[string]v1.Image)
 	newManifests := []v1.Descriptor{}
@@ -159,7 +152,7 @@ func runFilter(cmd *cobra.Command, args []string) error {
 			digestRef := dstRef.Context().Tag("dummy").Digest(imgDigest.String())
 
 			// Push the OCI image to target registry
-			if err := remote.Write(digestRef, img, authOption); err != nil {
+			if err := remote.Write(digestRef, img, remote.WithAuthFromKeychain(authn.DefaultKeychain)); err != nil {
 				return fmt.Errorf("failed to push image for %s/%s: %w", manifest.Platform.OS, manifest.Platform.Architecture, err)
 			}
 
@@ -207,7 +200,7 @@ func runFilter(cmd *cobra.Command, args []string) error {
 	}
 
 	// Push the new OCI index (manifest list)
-	if err := remote.WriteIndex(dstRef, newIdx, authOption); err != nil {
+	if err := remote.WriteIndex(dstRef, newIdx, remote.WithAuthFromKeychain(authn.DefaultKeychain)); err != nil {
 		return fmt.Errorf("failed to push filtered index: %w", err)
 	}
 
